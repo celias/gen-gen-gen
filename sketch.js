@@ -1,81 +1,113 @@
 const canvasSketch = require('canvas-sketch');
-const palettes = require('nice-color-palettes');
-const { lerp } = require('canvas-sketch-util/math');
 const random = require('canvas-sketch-util/random');
+const { lerp } = require('canvas-sketch-util/math');
+const palettes = require('nice-color-palettes');
 
 const settings = {
-  dimensions: [2048, 2048]
+  dimensions: [2048, 1024]
 };
 
-const sketch = () => {
-  const colorCount = random.rangeFloor(2, 6);
-  const symbolCount = random.rangeFloor(2, 6);
-  const symbols = ([['++++'], ['****'], ['}fuck}}'], [['))'] + ['((']]]);
-  const symbol = random.shuffle(random.pick(symbols)).slice(0, symbolCount);
-  const palette = random.shuffle(random.pick(palettes)).slice(0, colorCount);
+const sketch = ({ width, height }) => {
+  // random palette of 1-5 colors
+  const nColors = random.rangeFloor(1, 6);
+  const palette = random.shuffle(random.pick(palettes)).slice(0, nColors);
+  const background = 'white';
+
+  // padding around edges
+  const margin = width * 0.5;
+
+  // Create a grid of points (in pixel space) within the margin bounds
   const createGrid = () => {
+    const xCount = 6;
+    const yCount = 6;
     const points = [];
-    const count = 50;
-    for (let x = 0; x < count; x++) {
-      for (let y = 0; y < count; y++) {
-        const u = count <= 1 ? 0.5 : x / (count - 1);
-        const v = count <= 1 ? 0.5 : y / (count - 1);
-        // noise
-        const radius = Math.abs(random.noise2D(u, v)) * 0.05;
-        points.push({
-          color: random.pick(palette),
-          radius,
-          rotation: random.noise2D(u, v),
-          position: [u, v],
-          symbol: random.pick(symbol),
-        });
-      }
-    }
+
+    for (let x = 0; x < xCount; x++) {
+      for (let y = 0; y < yCount; y++) {
+        const u = x / (xCount - 1);
+        const v = y / (yCount - 1);
+        const px = lerp(margin, width - margin, u);
+        const py = lerp(margin, height - margin, v);
+        points.push([px, py]);
+      };
+    };
+
     return points;
   };
 
-  // deterministic randomness
-  // random.setSeed(5);
-  const points = createGrid().filter(() => random.value() > 0.5);
-  const margin = 400;
+  // create the grid
+  let grid = createGrid();
 
+  // create the shapes
+  let shapes = [];
 
+  // As long as we have 2 grid points left
+  while (grid.length > 2) {
+    // select two random points from the grid
+    const pointsToRemove = random.shuffle(grid).slice(0, 2);
+    // not enough points then just break out
+    if (pointsToRemove.length < 2) {
+      break;
+    }
+
+    // the color of the trapezoid
+    const color = random.pick(palette);
+
+    // filter these points out of the grid
+    grid = grid.filter(p => !pointsToRemove.includes(p));
+
+    // form the trapezoid from points A to B
+    const [a, b] = pointsToRemove;
+
+    shapes.push({
+      color,
+      // The path goes from the bottom of the page,
+      // up to the first point,
+      // through the second point,
+      // and then back down to the bottom of the page
+      path: [
+        [a[0], height - margin],
+        a,
+        b,
+        [b[0], height - margin]
+      ],
+      // The average Y position of both grid points
+      // This will be used for layering
+      y: (a[1] + b[1]) / 2
+    });
+  }
+
+  // Sort/layer the shapes according to their average Y position
+  shapes.sort((a, b) => a.y - b.y);
+
+  // Now render
   return ({ context, width, height }) => {
-    context.fillStyle = 'white';
+    // make sure alpha is back to 1.0 before
+    // you draw the background color
+    context.globalAlpha = 1;
+    context.fillStyle = background;
     context.fillRect(0, 0, width, height);
 
-    points.forEach(data => {
-      const {
-        position,
-        radius,
-        color,
-        rotation,
-        symbol
-      } = data;
+    shapes.forEach(({ lineWidth, path, color }) => {
+      context.beginPath();
+      path.forEach(([x, y]) => {
+        context.lineTo(x, y);
+      });
+      context.closePath();
 
-      const [u, v] = position;
-
-      const x = lerp(margin, width - margin, u);
-      const y = lerp(margin, width - margin, v);
-
-      // context.beginPath();
-      // context.arc(x, y, radius * width, 0, Math.PI * 2, false);
-      // context.fillStyle = color;
-      // context.fill();
-
-      context.save();
+      // Draw the trapezoid with specific color
+      context.lineWidth = 20;
+      context.globalAlpha = 0.85;
       context.fillStyle = color;
-      context.font = `${radius * width}px "Helvetica"`;
-      context.translate(x, y);
-      context.rotate(rotation);
-      context.fillText(symbol, 0, 0);
-      context.restore();
+      context.fill();
 
-
+      // Outline the full opacity
+      context.lineJoin = context.lineCap = 'round';
+      context.strokeStyle = background;
+      context.globalAlpha = 1;
+      context.stroke();
     });
-
   };
 };
 
 canvasSketch(sketch, settings);
-
