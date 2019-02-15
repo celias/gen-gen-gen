@@ -14,7 +14,7 @@ const sketch = ({ width, height }) => {
   const background = 'white';
 
   // padding around edges
-  const margin = width * 0.5;
+  const margin = width * 0.02;
 
   // Create a grid of points (in pixel space) within the margin bounds
   const createGrid = () => {
@@ -29,9 +29,9 @@ const sketch = ({ width, height }) => {
         const px = lerp(margin, width - margin, u);
         const py = lerp(margin, height - margin, v);
         points.push([px, py]);
-      };
+      }
     };
-
+    console.log(points);
     return points;
   };
 
